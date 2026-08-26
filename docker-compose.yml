@@ -1,0 +1,235 @@
+x-service-env: &service-env
+  env_file:
+    - .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://rag:rag@postgres:5432/multimodal_rag
+    REDIS_URL: redis://redis:6379/0
+    UPLOAD_DIR: /data/uploads
+    OAUTH_REDIRECT_URI: http://localhost:3000/api/v1/auth/google/callback
+    USE_MICROSERVICES_PIPELINE: "true"
+    INTERNAL_SERVICE_TOKEN: dev-internal-token
+  volumes:
+    - upload_data:/data/uploads
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  dns:
+    - 8.8.8.8
+    - 1.1.1.1
+
+x-service-build: &service-build
+  context: ..
+  dockerfile: multimodal_rag_app/services/Dockerfile
+  target: runtime
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag
+      POSTGRES_DB: multimodal_rag
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag -d multimodal_rag"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  gateway:
+    <<: *service-env
+    build:
+      <<: *service-build
+      args:
+        SERVICE_DIR: multimodal_rag_app/services/gateway
+        SERVICE_PORT: 8000
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rag:rag@postgres:5432/multimodal_rag
+      REDIS_URL: redis://redis:6379/0
+      UPLOAD_DIR: /data/uploads
+      OAUTH_REDIRECT_URI: http://localhost:3000/api/v1/auth/google/callback
+      FRONTEND_URL: http://localhost:3000
+    depends_on:
+      - auth
+      - user-management
+      - documents
+      - ingestion-orchestrator
+      - retrieval
+      - query
+      - dashboard
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api/v1
+    ports:
+      - "3000:80"
+    depends_on:
+      - gateway
+
+  auth:
+    <<: *service-env
+    build:
+      <<: *service-build
+      args:
+        SERVICE_DIR: multimodal_rag_app/services/auth
+        SERVICE_PORT: 8001
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rag:rag@postgres:5432/multimodal_rag
+      REDIS_URL: redis://redis:6379/0
+      UPLOAD_DIR: /data/uploads
+      OAUTH_REDIRECT_URI: http://localhost:3000/api/v1/auth/google/callback
+
+  user-management:
+    <<: *service-env
+    build:
+      <<: *service-build
+      args:
+        SERVICE_DIR: multimodal_rag_app/services/user-management
+        SERVICE_PORT: 8002
+
+  documents:
+    <<: *service-env
+    build:
+      <<: *service-build
+      args:
+        SERVICE_DIR: multimodal_rag_app/services/documents
+        SERVICE_PORT: 8003
+
+  ingestion-orchestrator:
+    <<: *service-env
+    build:
+      <<: *service-build
+      args:
+        SERVICE_DIR: multimodal_rag_app/services/ingestion-orchestrator
+        SERVICE_PORT: 8004
+    depends_on:
+      - extraction
+      - chunking-indexing
+      - embedding
+      - notifications
+
+  extraction:
+    <<: *service-env
+    build:
+      <<: *service-build
+      target: extraction
+      args:
+        SERVICE_DIR: multimodal_rag_app/services/extraction
+        SERVICE_PORT: 8010
+
+  chunking-indexing:
+    <<: *service-env
+    build:
+      <<: *service-build
+      args:
+        SERVICE_DIR: multimodal_rag_app/services/chunking-indexing
+        SERVICE_PORT: 8011
+
+  embedding:
+    <<: *service-env
+    build:
+      <<: *service-build
+      args:
+        SERVICE_DIR: multimodal_rag_app/services/embedding
+        SERVICE_PORT: 8012
+
+  sparse-retrieval:
+    <<: *service-env
+    build:
+      <<: *service-build
+      args:
+        SERVICE_DIR: multimodal_rag_app/services/sparse-retrieval
+        SERVICE_PORT: 8013
+
+  retrieval:
+    <<: *service-env
+    build:
+      <<: *service-build
+      args:
+        SERVICE_DIR: multimodal_rag_app/services/retrieval
+        SERVICE_PORT: 8014
+    depends_on:
+      - sparse-retrieval
+
+  generation:
+    <<: *service-env
+    build:
+      <<: *service-build
+      args:
+        SERVICE_DIR: multimodal_rag_app/services/generation
+        SERVICE_PORT: 8015
+
+  query:
+    <<: *service-env
+    build:
+      <<: *service-build
+      args:
+        SERVICE_DIR: multimodal_rag_app/services/query
+        SERVICE_PORT: 8016
+    depends_on:
+      - retrieval
+      - generation
+
+  dashboard:
+    <<: *service-env
+    build:
+      <<: *service-build
+      args:
+        SERVICE_DIR: multimodal_rag_app/services/dashboard
+        SERVICE_PORT: 8017
+
+  notifications:
+    <<: *service-env
+    build:
+      <<: *service-build
+      args:
+        SERVICE_DIR: multimodal_rag_app/services/notifications
+        SERVICE_PORT: 8018
+
+  # Legacy monolith (optional — use profile monolith)
+  api:
+    profiles: ["monolith"]
+    build:
+      context: ..
+      dockerfile: multimodal_rag_app/backend/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rag:rag@postgres:5432/multimodal_rag
+      REDIS_URL: redis://redis:6379/0
+      UPLOAD_DIR: /data/uploads
+      OAUTH_REDIRECT_URI: http://localhost:3000/api/v1/auth/google/callback
+      USE_MICROSERVICES_PIPELINE: "false"
+    volumes:
+      - upload_data:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  upload_data:

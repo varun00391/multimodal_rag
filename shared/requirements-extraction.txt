@@ -1,0 +1,3 @@
+# PDF extraction only — used by the extraction service (and the monolith).
+# Docling pulls PyTorch, transformers, and OCR. Do not install this in other services.
+docling>=2.14.0

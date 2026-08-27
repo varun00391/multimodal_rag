@@ -1,6 +1,6 @@
 # Microservices Architecture
 
-This project implements the PRD microservice decomposition. The legacy monolith remains available under the Docker Compose `monolith` profile.
+This project implements the PRD microservice decomposition. The backend is `services/` (one process per service) plus `shared/` (the library they all import).
 
 ## Services
 
@@ -21,7 +21,7 @@ This project implements the PRD microservice decomposition. The legacy monolith 
 | **dashboard** | 8017 | Dashboards, audit logs |
 | **notifications** | 8018 | Redis job status events (optional) |
 
-## Start (microservices — default)
+## Start
 
 ```bash
 cd multimodal_rag_app
@@ -31,12 +31,6 @@ docker compose up --build
 
 - API: http://localhost:8000
 - Swagger: http://localhost:8000/docs (via gateway — use individual service ports for service-specific docs)
-
-## Start (legacy monolith)
-
-```bash
-docker compose --profile monolith up --build api postgres redis
-```
 
 ## Request flow
 
@@ -96,11 +90,11 @@ uvicorn main:app --reload --port 8001
 
 ```text
 multimodal_rag_app/
+  frontend/              # React UI
   shared/rag_shared/     # shared library
   services/
     gateway/
     auth/
     ...
-  backend/               # legacy monolith (still supported)
   docker-compose.yml
 ```

@@ -2,7 +2,7 @@
 
 FastAPI backend for the Multi-Modal RAG application, wired to the Docling + Qdrant + Groq pipeline in the parent `rag/` package.
 
-**Architecture:** PRD microservices (default) or legacy monolith — see [MICROSERVICES.md](./MICROSERVICES.md).
+**Architecture:** PRD microservices — see [MICROSERVICES.md](./MICROSERVICES.md).
 
 ## Stack
 
@@ -15,7 +15,7 @@ FastAPI backend for the Multi-Modal RAG application, wired to the Docling + Qdra
 - **Qdrant Cloud** — vector index
 - **BM25 + RRF** — hybrid retrieval
 
-## Quick start (microservices)
+## Quick start
 
 ```bash
 cd multimodal_rag_app
@@ -32,12 +32,6 @@ docker compose up --build
 **Health:** http://localhost:8000/health
 
 The React frontend (port 3000) proxies API calls to the gateway. After Google OAuth, you are redirected back to the frontend.
-
-## Quick start (legacy monolith)
-
-```bash
-docker compose --profile monolith up --build api postgres redis
-```
 
 ## Complete end-to-end flow
 
@@ -190,7 +184,7 @@ Roles: `SUPER_ADMIN`, `ADMIN`, `USER`
 
 | Symptom | Fix |
 |---|---|
-| Ingestion stuck at `QUEUED` | Check `docker compose logs api` for errors |
+| Ingestion stuck at `QUEUED` | Check `docker compose logs ingestion-orchestrator extraction` for errors |
 | `DEPARTMENT_NOT_FOUND` on upload | Use department UUID from `GET /departments`, not the name |
 | Query returns 404 | Wait until ingestion job is `COMPLETED` |
 | OAuth redirect to dead page | Open `/docs` on port 8000 after login |
@@ -198,13 +192,16 @@ Roles: `SUPER_ADMIN`, `ADMIN`, `USER`
 
 ## Local development (without Docker)
 
+Run a single service (example: auth). Requires local PostgreSQL, Redis, and the same API keys in `.env`.
+
 ```bash
-cd multimodal_rag_app/backend
+cd multimodal_rag_app
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-export PYTHONPATH=/path/to/autonomous_agents
-export $(grep -v '^#' ../.env | xargs)
-uvicorn app.main:app --reload --port 8000
+pip install -r shared/requirements.txt
+export PYTHONPATH=/path/to/autonomous_agents:/path/to/autonomous_agents/multimodal_rag_app/shared
+export $(grep -v '^#' .env | xargs)
+cd services/auth
+uvicorn main:app --reload --port 8001
 ```
 
-Requires local PostgreSQL, Redis, and the same API keys in `.env`.
+See [MICROSERVICES.md](./MICROSERVICES.md) for ports and the full service list. Prefer `docker compose up --build` to run the whole stack.

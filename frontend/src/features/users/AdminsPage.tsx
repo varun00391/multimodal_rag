@@ -1,43 +1,37 @@
-import { useEffect, useState } from 'react'
-import { adminsApi } from '../../api/admins'
+import { useCallback, useEffect, useState } from 'react'
+import { adminsApi, type AdminListItem } from '../../api/admins'
 import { departmentsApi } from '../../api/departments'
 import { Button } from '../../components/Button'
 import { RoleBadge, StatusBadge } from '../../components/Badge'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
-import { ErrorBanner, LoadingSkeleton, PageHeader, ScopeBanner } from '../../components/PageHeader'
+import { EmptyState, ErrorBanner, LoadingSkeleton, PageHeader } from '../../components/PageHeader'
 import { useToast } from '../../hooks/useToast'
-import type { Department, User } from '../../types'
 
 export function AdminsPage() {
   const { showToast } = useToast()
-  const [departments, setDepartments] = useState<Department[]>([])
-  const [selectedDept, setSelectedDept] = useState('')
-  const [admins, setAdmins] = useState<User[]>([])
+  const [admins, setAdmins] = useState<AdminListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState({ name: '', email: '', department_name: '' })
   const [creating, setCreating] = useState(false)
-  const [removeTarget, setRemoveTarget] = useState<User | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<AdminListItem | null>(null)
   const [removing, setRemoving] = useState(false)
 
-  useEffect(() => {
-    departmentsApi
-      .list()
-      .then((depts) => {
-        setDepartments(depts)
-        if (depts.length) setSelectedDept(depts[0].department_id)
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load'))
-      .finally(() => setLoading(false))
+  const loadAdmins = useCallback(async () => {
+    setError(null)
+    try {
+      const data = await adminsApi.list()
+      setAdmins(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load admins')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => {
-    if (!selectedDept) return
-    departmentsApi
-      .admins(selectedDept)
-      .then(setAdmins)
-      .catch(() => setAdmins([]))
-  }, [selectedDept])
+    void loadAdmins()
+  }, [loadAdmins])
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -46,9 +40,8 @@ export function AdminsPage() {
       await adminsApi.create(form.name, form.email, form.department_name)
       showToast('Admin created', 'success')
       setForm({ name: '', email: '', department_name: '' })
-      if (selectedDept) {
-        setAdmins(await departmentsApi.admins(selectedDept))
-      }
+      setLoading(true)
+      await loadAdmins()
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Create failed', 'error')
     } finally {
@@ -57,13 +50,19 @@ export function AdminsPage() {
   }
 
   async function handleRemove() {
-    if (!removeTarget || !selectedDept) return
+    if (!removeTarget) return
+    const departmentId = removeTarget.department_ids[0]
+    if (!departmentId) {
+      showToast('Admin has no department assignment to remove.', 'error')
+      return
+    }
     setRemoving(true)
     try {
-      await departmentsApi.removeAdmin(selectedDept, removeTarget.user_id)
+      await departmentsApi.removeAdmin(departmentId, removeTarget.user_id)
       showToast('Admin removed', 'success')
       setRemoveTarget(null)
-      setAdmins(await departmentsApi.admins(selectedDept))
+      setLoading(true)
+      await loadAdmins()
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Remove failed', 'error')
     } finally {
@@ -71,15 +70,12 @@ export function AdminsPage() {
     }
   }
 
-  const deptName = departments.find((d) => d.department_id === selectedDept)?.name
-
   return (
     <div>
       <PageHeader
         title="Department admins"
-        description="Create and manage departmental administrators."
+        description="Create and manage all departmental administrators across the organization."
       />
-      {deptName && <ScopeBanner text={`Viewing admins for: ${deptName}`} />}
 
       <form
         onSubmit={(e) => void handleCreate(e)}
@@ -112,30 +108,26 @@ export function AdminsPage() {
         </Button>
       </form>
 
-      <div className="mb-4">
-        <select
-          value={selectedDept}
-          onChange={(e) => setSelectedDept(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        >
-          {departments.map((d) => (
-            <option key={d.department_id} value={d.department_id}>
-              {d.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
       {loading && <LoadingSkeleton rows={4} />}
-      {error && <ErrorBanner message={error} />}
+      {error && <ErrorBanner message={error} onRetry={() => void loadAdmins()} />}
 
-      {!loading && (
+      {!loading && !error && admins.length === 0 && (
+        <EmptyState
+          title="No admins yet"
+          description="Create a departmental admin by providing name, email, and department name."
+        />
+      )}
+
+      {!loading && admins.length > 0 && (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
                   Admin
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                  Department
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
                   Role
@@ -154,6 +146,11 @@ export function AdminsPage() {
                   <td className="px-4 py-3">
                     <p className="font-medium text-slate-900">{admin.name}</p>
                     <p className="text-xs text-slate-500">{admin.email}</p>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    {admin.department_names.length > 0
+                      ? admin.department_names.join(', ')
+                      : '—'}
                   </td>
                   <td className="px-4 py-3">
                     <RoleBadge role={admin.role} />
@@ -186,7 +183,9 @@ export function AdminsPage() {
       <ConfirmDialog
         open={!!removeTarget}
         title="Remove admin"
-        message={`Remove ${removeTarget?.name} (${removeTarget?.email}) from this department? They will lose admin access.`}
+        message={`Remove ${removeTarget?.name} (${removeTarget?.email}) from ${
+          removeTarget?.department_names.join(', ') || 'their department'
+        }? They will lose admin access.`}
         confirmLabel="Remove"
         destructive
         loading={removing}

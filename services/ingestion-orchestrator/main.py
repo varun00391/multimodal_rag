@@ -20,6 +20,5 @@ app = create_service_app(
     service_name="ingestion-orchestrator",
     routers=[ingestion_router.router],
     internal_routers=[internal],
-    init_db=True,
     enable_session=True,
 )

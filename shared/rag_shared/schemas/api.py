@@ -42,6 +42,19 @@ class AdminCreate(BaseModel):
     department_name: str = Field(min_length=1, max_length=255)
 
 
+class AdminListResponse(BaseModel):
+    user_id: str
+    email: EmailStr
+    name: str
+    role: UserRole
+    department_ids: list[str]
+    department_names: list[str]
+    status: UserStatus
+    is_super_admin_seed: bool = False
+
+    model_config = {"from_attributes": True}
+
+
 class UserCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     email: EmailStr

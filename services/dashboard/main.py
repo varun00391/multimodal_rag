@@ -4,6 +4,5 @@ from rag_shared.routers import audit, dashboard
 app = create_service_app(
     service_name="dashboard",
     routers=[dashboard.router, audit.router],
-    init_db=True,
     enable_session=True,
 )

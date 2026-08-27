@@ -149,3 +149,33 @@ async def list_department_users(db: AsyncSession, department_id: str, role: User
         stmt = stmt.where(User.role == role)
     result = await db.execute(stmt)
     return list(result.scalars().unique().all())
+
+
+async def list_all_admins(db: AsyncSession) -> list[User]:
+    result = await db.execute(
+        select(User)
+        .options(
+            selectinload(User.department_assignments).selectinload(UserDepartmentAssignment.department)
+        )
+        .where(User.role == UserRole.ADMIN)
+        .order_by(User.name)
+    )
+    return list(result.scalars().unique().all())
+
+
+def to_admin_list_response(user: User) -> "AdminListResponse":
+    from rag_shared.schemas.api import AdminListResponse
+
+    department_names = [
+        a.department.name for a in user.department_assignments if getattr(a, "department", None)
+    ]
+    return AdminListResponse(
+        user_id=user.id,
+        email=user.email,
+        name=user.name,
+        role=user.role,
+        department_ids=[a.department_id for a in user.department_assignments],
+        department_names=department_names,
+        status=user.status,
+        is_super_admin_seed=user.is_super_admin_seed,
+    )

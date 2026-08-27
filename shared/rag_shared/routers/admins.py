@@ -8,11 +8,20 @@ from rag_shared.core.errors import AppError
 from rag_shared.db.session import get_db
 from rag_shared.models.entities import Department, User, UserDepartmentAssignment
 from rag_shared.models.enums import UserRole
-from rag_shared.schemas.api import AdminCreate, UserResponse
+from rag_shared.schemas.api import AdminCreate, AdminListResponse, UserResponse
 from rag_shared.services.audit import write_audit_log
-from rag_shared.services.users import create_admin, list_department_users, to_user_response
+from rag_shared.services.users import create_admin, list_all_admins, list_department_users, to_admin_list_response, to_user_response
 
 router = APIRouter(tags=["admins"])
+
+
+@router.get("/admins", response_model=list[AdminListResponse])
+async def list_admins(
+    db: AsyncSession = Depends(get_db),
+    _: CurrentUser = Depends(require_super_admin),
+) -> list[AdminListResponse]:
+    users = await list_all_admins(db)
+    return [to_admin_list_response(u) for u in users]
 
 
 @router.post("/admins", response_model=UserResponse, status_code=201)

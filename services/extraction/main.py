@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from rag.ingest import ingest_pdf
 from rag_shared.app_factory import create_service_app, verify_internal_token
 from rag_shared.config import get_settings
+from rag_shared.core.errors import AppError
 from rag_shared.rag_env import ensure_rag_env
 from rag_shared.schemas.internal import ExtractionRequest, ExtractionResponse
 from rag_shared.workspace import document_rag_dir
@@ -20,7 +21,16 @@ def extract_document(payload: ExtractionRequest) -> ExtractionResponse:
     ensure_rag_env(settings)
     pdf_path = Path(payload.storage_path)
     workspace = Path(payload.upload_dir) / "workspaces"
-    result = ingest_pdf(pdf_path, workspace)
+    try:
+        result = ingest_pdf(pdf_path, workspace)
+    except AppError:
+        raise
+    except Exception as exc:
+        raise AppError(
+            code="EXTRACTION_FAILED",
+            message=f"Docling extraction failed: {exc}",
+            status_code=500,
+        ) from exc
     document_json = str(result["document_json"])
     rag_path = str(Path(document_json).parent / "rag")
     return ExtractionResponse(

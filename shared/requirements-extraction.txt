@@ -1,3 +1,4 @@
 # PDF extraction only — used by the extraction service (and the monolith).
 # Docling pulls PyTorch, transformers, and OCR. Do not install this in other services.
+# 2.123+ hashes PdfPipelineOptions with serialize_as_any=True; rag.ingest patches that hasher.
 docling>=2.14.0

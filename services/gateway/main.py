@@ -83,7 +83,6 @@ def _forward_headers(request: Request, extra: dict[str, str]) -> dict[str, str]:
 app = create_service_app(
     service_name="gateway",
     routers=[auth_router],
-    init_db=True,
     enable_session=True,
     lifespan_hook=prewarm_aggregated_openapi,
 )

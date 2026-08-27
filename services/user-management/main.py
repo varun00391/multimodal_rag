@@ -4,6 +4,5 @@ from rag_shared.routers import admins, departments, users
 app = create_service_app(
     service_name="user-management",
     routers=[departments.router, admins.router, users.router],
-    init_db=True,
     enable_session=True,
 )

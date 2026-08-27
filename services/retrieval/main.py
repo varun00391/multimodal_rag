@@ -101,6 +101,5 @@ app = create_service_app(
     service_name="retrieval",
     routers=[public],
     internal_routers=[internal],
-    init_db=True,
     enable_session=True,
 )

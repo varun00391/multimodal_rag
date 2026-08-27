@@ -1,0 +1,23 @@
+services:
+  extraction-api:
+    build: .
+    container_name: pdf-extraction-api
+    ports:
+      - "8010:8010"
+    env_file:
+      - .env
+    environment:
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8010
+      EXTRACTION_OUTPUT_DIR: /app/output
+      EXTRACTION_DATABASE_PATH: /app/data/extraction_jobs.db
+    volumes:
+      - ./output:/app/output
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/api/v1/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

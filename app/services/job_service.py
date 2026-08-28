@@ -55,6 +55,8 @@ class JobService:
             policy=job.policy,
             error_code=job.error_code,
             error_message=job.error_message,
+            duration_ms=job.duration_ms,
+            cache_hit=job.cache_hit,
             created_at=job.created_at,
             updated_at=job.updated_at,
         )
@@ -65,18 +67,42 @@ class JobService:
             raise JobNotFoundError(job_id)
         return job
 
+    async def mark_complete(
+        self,
+        job_id: str,
+        status: JobStatus,
+        *,
+        duration_ms: int,
+        cache_hit: bool,
+        document_path: str,
+        report_path: str,
+    ) -> JobRecord:
+        job = await self._job_store.update_status(
+            job_id,
+            status,
+            duration_ms=duration_ms,
+            cache_hit=cache_hit,
+            document_path=document_path,
+            report_path=report_path,
+        )
+        if job is None:
+            raise JobNotFoundError(job_id)
+        return job
+
     async def mark_failed(
         self,
         job_id: str,
         *,
         error_code: str,
         error_message: str,
+        duration_ms: int | None = None,
     ) -> JobRecord:
         job = await self._job_store.update_status(
             job_id,
             JobStatus.FAILED,
             error_code=error_code,
             error_message=error_message,
+            duration_ms=duration_ms,
         )
         if job is None:
             raise JobNotFoundError(job_id)
@@ -94,7 +120,10 @@ class JobService:
     ) -> ExtractionPolicy:
         if policy.force_extractor or policy.compare_extractors:
             if not benchmark_enabled:
-                raise BenchmarkNotEnabledError()
+                raise BenchmarkNotEnabledError(
+                    force_extractor=policy.force_extractor,
+                    compare_extractors=policy.compare_extractors,
+                )
 
         if policy.page_start is not None and policy.page_end is not None:
             if policy.page_start > policy.page_end:

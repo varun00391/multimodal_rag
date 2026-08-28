@@ -18,10 +18,22 @@ def tmp_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
     monkeypatch.setenv("EXTRACTION_DATABASE_PATH", str(db_path))
     monkeypatch.setenv("EXTRACTION_MAX_FILE_BYTES", "1048576")
     monkeypatch.setenv("EXTRACTION_BENCHMARK_ENABLED", "false")
+    monkeypatch.setenv("EURI_API_KEY", "")
     get_settings.cache_clear()
     settings = get_settings()
     yield settings
     get_settings.cache_clear()
+    from app.api.dependencies import (
+        get_docling_adapter,
+        get_gemini_adapter,
+        get_groq_adapter,
+        get_job_store,
+    )
+
+    get_job_store.cache_clear()
+    get_docling_adapter.cache_clear()
+    get_gemini_adapter.cache_clear()
+    get_groq_adapter.cache_clear()
 
 
 @pytest.fixture
@@ -104,3 +116,61 @@ async def test_upload_rejects_oversized_file(client: AsyncClient) -> None:
     )
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "FILE_TOO_LARGE"
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_force_extractor_when_benchmark_disabled(
+    client: AsyncClient,
+) -> None:
+    response = await client.post(
+        "/api/v1/extractions",
+        files={"file": ("sample.pdf", make_pdf_bytes(), "application/pdf")},
+        data={"force_extractor": "docling:digital-layout"},
+    )
+    assert response.status_code == 403
+    payload = response.json()["error"]
+    assert payload["code"] == "BENCHMARK_NOT_ENABLED"
+    assert payload["details"]["force_extractor"] == "docling:digital-layout"
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_compare_extractors_when_benchmark_disabled(
+    client: AsyncClient,
+) -> None:
+    response = await client.post(
+        "/api/v1/extractions",
+        files={"file": ("sample.pdf", make_pdf_bytes(), "application/pdf")},
+        data={"compare_extractors": "true"},
+    )
+    assert response.status_code == 403
+    payload = response.json()["error"]
+    assert payload["code"] == "BENCHMARK_NOT_ENABLED"
+    assert payload["details"]["compare_extractors"] is True
+
+
+@pytest.mark.asyncio
+async def test_upload_treats_swagger_sentinel_force_extractor_as_unset(
+    client: AsyncClient,
+) -> None:
+    response = await client.post(
+        "/api/v1/extractions",
+        files={"file": ("sample.pdf", make_pdf_bytes(), "application/pdf")},
+        data={
+            "allow_managed_apis": "true",
+            "visual_understanding": "false",
+            "force_extractor": "null",
+            "compare_extractors": "false",
+        },
+    )
+    assert response.status_code == 202
+    assert response.json()["status"] == "queued"
+
+
+@pytest.mark.asyncio
+async def test_openapi_hides_benchmark_form_fields(client: AsyncClient) -> None:
+    schema = (await client.get("/openapi.json")).json()["components"]["schemas"][
+        "Body_create_extraction_api_v1_extractions_post"
+    ]
+    assert "force_extractor" not in schema["properties"]
+    assert "compare_extractors" not in schema["properties"]
+    assert "file" in schema["properties"]

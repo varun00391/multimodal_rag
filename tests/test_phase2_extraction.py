@@ -20,10 +20,22 @@ def tmp_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
     monkeypatch.setenv("EXTRACTION_DATABASE_PATH", str(db_path))
     monkeypatch.setenv("EXTRACTION_MAX_FILE_BYTES", "10485760")
     monkeypatch.setenv("EXTRACTION_BENCHMARK_ENABLED", "false")
+    monkeypatch.setenv("EURI_API_KEY", "")
     get_settings.cache_clear()
     settings = get_settings()
     yield settings
     get_settings.cache_clear()
+    from app.api.dependencies import (
+        get_docling_adapter,
+        get_gemini_adapter,
+        get_groq_adapter,
+        get_job_store,
+    )
+
+    get_job_store.cache_clear()
+    get_docling_adapter.cache_clear()
+    get_gemini_adapter.cache_clear()
+    get_groq_adapter.cache_clear()
 
 
 @pytest.fixture

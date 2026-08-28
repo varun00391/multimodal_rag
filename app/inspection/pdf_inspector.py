@@ -168,6 +168,12 @@ class PdfInspector:
         figure_candidate_count = sum(
             1 for block in image_blocks if coverage_ratio(self._rect_area(block.get("bbox")), page_area) >= 0.08
         )
+        figure_regions = self._figure_regions(
+            image_blocks,
+            page_area,
+            min_coverage=self._settings.groq_min_figure_coverage,
+            max_coverage=self._settings.groq_max_figure_coverage,
+        )
         probable_columns = estimate_columns(block_rects, page.rect.width)
         irregular_block_order = block_order_irregularity(block_rects)
         formula_like_regions = sum(1 for line in lines if looks_like_formula_or_code(line))
@@ -214,6 +220,8 @@ class PdfInspector:
             routing_hints.append("pymupdf_fast_path")
         if probable_complex_table:
             routing_hints.append("probable_complex_table")
+        if figure_regions:
+            routing_hints.append("figure_regions")
 
         return PageInspection(
             page=page_number,
@@ -227,8 +235,30 @@ class PdfInspector:
             probable_complex_table=probable_complex_table,
             use_pymupdf_fast_path=use_pymupdf,
             routing_hints=routing_hints,
+            figure_regions=figure_regions,
             metadata={"sample_text": full_text[:2000]},
         )
+
+    @staticmethod
+    def _figure_regions(
+        image_blocks: list[dict],
+        page_area: float,
+        *,
+        min_coverage: float,
+        max_coverage: float,
+    ) -> list[list[float]]:
+        regions: list[list[float]] = []
+        for block in image_blocks:
+            bbox = block.get("bbox")
+            if not bbox or len(bbox) != 4:
+                continue
+            left, top, right, bottom = (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
+            area = max(0.0, right - left) * max(0.0, bottom - top)
+            coverage = coverage_ratio(area, page_area)
+            if coverage < min_coverage or coverage >= max_coverage:
+                continue
+            regions.append([left, top, right, bottom])
+        return regions
 
     @staticmethod
     def _rect_area(bbox: tuple[float, float, float, float] | list[float] | None) -> float:

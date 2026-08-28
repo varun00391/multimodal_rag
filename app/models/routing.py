@@ -31,4 +31,6 @@ class ExtractionGroup(BaseModel):
     pages: list[int] = Field(default_factory=list)
     options_hash: str | None = None
     privacy_mode: str | None = None
+    context_pages: list[int] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    tasks: list[ExtractionTask] = Field(default_factory=list)

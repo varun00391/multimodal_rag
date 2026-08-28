@@ -61,12 +61,35 @@ class ResultNotReadyError(ExtractionError):
         )
 
 
+class QueueBackpressureError(ExtractionError):
+    def __init__(self, *, inflight: int, max_inflight: int) -> None:
+        super().__init__(
+            "QUEUE_BACKPRESSURE",
+            "The extraction queue is full. Retry the upload after in-flight jobs complete.",
+            status_code=429,
+            details={"inflight": inflight, "max_inflight": max_inflight},
+        )
+
+
 class BenchmarkNotEnabledError(ExtractionError):
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        force_extractor: str | None = None,
+        compare_extractors: bool = False,
+    ) -> None:
+        details: dict[str, Any] = {}
+        if force_extractor:
+            details["force_extractor"] = force_extractor
+        if compare_extractors:
+            details["compare_extractors"] = True
         super().__init__(
             "BENCHMARK_NOT_ENABLED",
-            "Benchmark options are disabled for this deployment.",
+            "force_extractor and compare_extractors are benchmark-only options "
+            "and are disabled for this deployment. Omit them for a normal "
+            "extraction, or set EXTRACTION_BENCHMARK_ENABLED=true.",
             status_code=403,
+            details=details,
         )
 
 

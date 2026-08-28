@@ -1,12 +1,14 @@
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.datastructures import FormData
 
 from app.config import Settings, get_settings
-from app.errors import InputValidationError, ResultNotReadyError
+from app.errors import InputValidationError, QueueBackpressureError, ResultNotReadyError
 from app.models.jobs import ExtractionPolicy, TERMINAL_JOB_STATUSES
+from app.observability.metrics import get_metrics
 from app.services.extraction_service import ExtractionService
 from app.services.job_service import JobService
 from app.storage.workspace import InputValidator, WorkspaceManager
@@ -20,9 +22,34 @@ from app.api.dependencies import (
 router = APIRouter(prefix="/api/v1")
 
 
+def _optional_form_str(form: FormData, key: str) -> str | None:
+    value = form.get(key)
+    return value if isinstance(value, str) else None
+
+
+def _optional_form_bool(form: FormData, key: str, default: bool = False) -> bool:
+    value = form.get(key)
+    if value is None or value == "":
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "on", "yes"}:
+            return True
+        if lowered in {"false", "0", "off", "no"}:
+            return False
+    return default
+
+
 @router.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.get("/metrics")
+async def metrics() -> dict:
+    return get_metrics().snapshot()
 
 
 @router.post(
@@ -31,21 +58,31 @@ async def health() -> dict[str, str]:
     response_model_exclude_none=True,
 )
 async def create_extraction(
+    request: Request,
     file: UploadFile = File(...),
     allow_managed_apis: bool = Form(default=True),
     visual_understanding: bool = Form(default=False),
     page_start: int | None = Form(default=None),
     page_end: int | None = Form(default=None),
-    force_extractor: str | None = Form(default=None),
-    compare_extractors: bool = Form(default=False),
     settings: Settings = Depends(get_settings),
     input_validator: InputValidator = Depends(get_input_validator),
     workspace_manager: WorkspaceManager = Depends(get_workspace_manager),
     job_service: JobService = Depends(get_job_service),
     extraction_service: ExtractionService = Depends(get_extraction_service),
 ) -> JSONResponse:
+    """Upload a PDF and queue an extraction job.
+
+    `force_extractor` and `compare_extractors` are accepted as extra form
+    fields for authorized benchmark clients, but they are omitted from this
+    form so `/docs` uploads are not rejected. They require
+    `EXTRACTION_BENCHMARK_ENABLED=true`.
+    """
     if not file.filename:
         raise InputValidationError("MISSING_FILENAME", "Uploaded file must include a filename.")
+
+    form = await request.form()
+    force_extractor = _optional_form_str(form, "force_extractor")
+    compare_extractors = _optional_form_bool(form, "compare_extractors")
 
     content = await file.read()
     max_bytes = settings.extraction_max_file_bytes
@@ -81,15 +118,23 @@ async def create_extraction(
         pdf_bytes=content,
     )
 
-    response = await job_service.create_job(
-        document_id=validation.sha256,
-        original_filename=file.filename,
-        source_path=str(workspace / "source.pdf"),
-        workspace_path=str(workspace),
-        sha256=validation.sha256,
-        page_count=validation.page_count,
-        policy=policy,
-    )
+    if not extraction_service.try_accept_job():
+        inflight, max_inflight = extraction_service.queue_stats()
+        raise QueueBackpressureError(inflight=inflight, max_inflight=max_inflight)
+
+    try:
+        response = await job_service.create_job(
+            document_id=validation.sha256,
+            original_filename=file.filename,
+            source_path=str(workspace / "source.pdf"),
+            workspace_path=str(workspace),
+            sha256=validation.sha256,
+            page_count=validation.page_count,
+            policy=policy,
+        )
+    except Exception:
+        extraction_service.release_accepted_job()
+        raise
     extraction_service.schedule(response.job_id)
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,

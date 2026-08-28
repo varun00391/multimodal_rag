@@ -69,6 +69,7 @@ class PageInspection(BaseModel):
     probable_complex_table: bool = False
     use_pymupdf_fast_path: bool = False
     routing_hints: list[str] = Field(default_factory=list)
+    figure_regions: list[list[float]] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

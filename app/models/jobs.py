@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class JobStatus(str, Enum):
@@ -26,6 +26,9 @@ TERMINAL_JOB_STATUSES = {
 }
 
 
+_UNSET_FORCE_EXTRACTOR = {"", "null", "none", "undefined"}
+
+
 class ExtractionPolicy(BaseModel):
     allow_managed_apis: bool = True
     visual_understanding: bool = False
@@ -33,6 +36,17 @@ class ExtractionPolicy(BaseModel):
     page_end: int | None = None
     force_extractor: str | None = None
     compare_extractors: bool = False
+
+    @field_validator("force_extractor", mode="before")
+    @classmethod
+    def normalize_force_extractor(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str) and value.strip().lower() in _UNSET_FORCE_EXTRACTOR:
+            return None
+        if isinstance(value, str):
+            return value.strip()
+        return value
 
 
 class JobRecord(BaseModel):
@@ -47,6 +61,10 @@ class JobRecord(BaseModel):
     policy: ExtractionPolicy
     error_code: str | None = None
     error_message: str | None = None
+    duration_ms: int | None = None
+    cache_hit: bool = False
+    document_path: str | None = None
+    report_path: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -65,6 +83,8 @@ class JobStatusResponse(BaseModel):
     policy: ExtractionPolicy
     error_code: str | None = None
     error_message: str | None = None
+    duration_ms: int | None = None
+    cache_hit: bool = False
     created_at: datetime
     updated_at: datetime
 

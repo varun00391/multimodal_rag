@@ -1,5 +1,23 @@
 # Standalone PDF Extraction — Implementation Plan
 
+**Status (2026-08-28):** Phases 1–9 are implemented. Phase 10 (calibration)
+is the only remaining work.
+
+| Phase | Name | Status |
+| --- | --- | --- |
+| 1 | API foundation | Done |
+| 2 | Canonical schema and PyMuPDF baseline | Done |
+| 3 | Docling baseline | Done |
+| 4 | Gemini baseline | Done |
+| 5 | Validators | Done |
+| 6 | Router and grouping | Done |
+| 7 | Fallback and merge | Done |
+| 8 | Groq visual semantics | Done |
+| 9 | Reporting, caching, and hardening | Done |
+| 10 | Calibration | Not started |
+
+**Done:** 9 of 10. **Left:** Phase 10.
+
 ## 1. Scope
 
 Build a standalone HTTP API that extracts structured information from:
@@ -58,7 +76,6 @@ multimodal_rag_app/
       continuity.py
     routing/
       policy.py
-      planner.py
       privacy.py
     grouping/
       planner.py
@@ -66,8 +83,19 @@ multimodal_rag_app/
       base.py
       pymupdf_adapter.py
       docling_adapter.py
+      docling_mapping.py
+      docling_pages.py
+      docling_profiles.py
+      euri_client.py
       gemini_adapter.py
+      gemini_pages.py
+      gemini_prompt.py
+      gemini_schema.py
       groq_vision_adapter.py
+      groq_client.py
+      groq_crops.py
+      groq_prompt.py
+      groq_schema.py
     execution/
       executor.py
       limits.py
@@ -81,6 +109,7 @@ multimodal_rag_app/
       manager.py
       policy.py
     merge/
+      combiner.py
       merger.py
       coordinates.py
       deduplication.py
@@ -89,6 +118,9 @@ multimodal_rag_app/
       jobs.py
       cache.py
       reports.py
+    observability/
+      logging.py
+      metrics.py
   tests/
     fixtures/
     unit/
@@ -700,7 +732,9 @@ Merger removes duplicate table text
 
 ## 22. Implementation Order
 
-### Phase 1: API foundation
+Phases 1–9 are complete. Remaining work is Phase 10 only.
+
+### Phase 1: API foundation — Done
 
 1. Create FastAPI project.
 2. Add configuration and error handling.
@@ -715,7 +749,7 @@ Acceptance:
 - Invalid or oversized files are rejected.
 - Job status is retrievable.
 
-### Phase 2: Canonical schema and PyMuPDF baseline
+### Phase 2: Canonical schema and PyMuPDF baseline — Done
 
 1. Define all canonical and inspection models.
 2. Implement PyMuPDF inspector.
@@ -727,7 +761,7 @@ Acceptance:
 - Simple digital PDFs produce valid canonical text and coordinates.
 - Scanned pages are identified but not yet fully extracted.
 
-### Phase 3: Docling baseline
+### Phase 3: Docling baseline — Done
 
 1. Implement warm profiles.
 2. Add selected-page/sub-PDF processing.
@@ -739,7 +773,7 @@ Acceptance:
 - Complex layouts and digital tables produce canonical output.
 - Local OCR works in local-only mode.
 
-### Phase 4: Gemini baseline
+### Phase 4: Gemini baseline — Done
 
 1. Add structured extraction schema and versioned prompt.
 2. Add rendered-page submission.
@@ -752,7 +786,7 @@ Acceptance:
 - Malformed responses are rejected.
 - Managed APIs are never called when prohibited.
 
-### Phase 5: Validators
+### Phase 5: Validators — Done
 
 1. Implement text validation.
 2. Implement bbox/layout validation.
@@ -763,7 +797,7 @@ Acceptance:
 
 - Every page receives validation results and machine-readable failures.
 
-### Phase 6: Router and grouping
+### Phase 6: Router and grouping — Done
 
 1. Implement privacy-first multi-label routing.
 2. Implement layered tasks.
@@ -776,7 +810,7 @@ Acceptance:
 - A mixed PDF uses different extractors for appropriate pages and regions.
 - One page can participate in multiple task groups.
 
-### Phase 7: Fallback and merge
+### Phase 7: Fallback and merge — Done
 
 1. Implement failure-specific fallback.
 2. Retry only failed work.
@@ -788,7 +822,7 @@ Acceptance:
 - One failed page does not discard successful pages.
 - Duplicate table text is removed without losing surrounding paragraphs.
 
-### Phase 8: Groq visual semantics
+### Phase 8: Groq visual semantics — Done
 
 1. Detect and crop meaningful visual regions.
 2. Implement Groq structured output.
@@ -798,7 +832,7 @@ Acceptance:
 
 - Charts and diagrams receive grounded descriptions when enabled.
 
-### Phase 9: Reporting, caching, and hardening
+### Phase 9: Reporting, caching, and hardening — Done
 
 1. Add extraction report.
 2. Add version-aware cache.
@@ -811,7 +845,10 @@ Acceptance:
 - Repeated identical extraction can use compatible cached results.
 - Provider failures do not crash unrelated extraction groups.
 
-### Phase 10: Calibration
+### Phase 10: Calibration — Not started
+
+This is the remaining phase. The extraction pipeline is complete; this phase
+measures it and tunes routing. It is not additional extractor code.
 
 1. Collect 20-50 documents and at least 500 representative pages.
 2. Create labelled ground truth.
@@ -826,6 +863,9 @@ Acceptance:
   the strongest single-extractor baseline.
 
 ## 23. Development Principle
+
+The complete pipeline below is implemented (Phases 1–9). Phase 10 measures it
+against labelled fixtures and tunes routing thresholds.
 
 Implement and measure forced PyMuPDF, Docling, and Gemini paths before enabling
 automatic routing. This isolates failures:

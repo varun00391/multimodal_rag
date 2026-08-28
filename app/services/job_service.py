@@ -5,6 +5,7 @@ from app.errors import BenchmarkNotEnabledError, JobNotFoundError
 from app.models.jobs import (
     ExtractionPolicy,
     JobCreateResponse,
+    JobListItem,
     JobRecord,
     JobStatus,
     JobStatusResponse,
@@ -46,10 +47,19 @@ class JobService:
 
     async def get_job(self, job_id: str) -> JobStatusResponse:
         job = await self._require_job(job_id)
+        return self._to_status_response(job)
+
+    async def list_jobs(self, *, limit: int = 50) -> list[JobListItem]:
+        jobs = await self._job_store.list_jobs(limit=limit)
+        return [self._to_list_item(job) for job in jobs]
+
+    @staticmethod
+    def _to_status_response(job: JobRecord) -> JobStatusResponse:
         return JobStatusResponse(
             job_id=job.job_id,
             document_id=job.document_id,
             status=job.status,
+            original_filename=job.original_filename,
             page_count=job.page_count,
             sha256=job.sha256,
             policy=job.policy,
@@ -59,6 +69,19 @@ class JobService:
             cache_hit=job.cache_hit,
             created_at=job.created_at,
             updated_at=job.updated_at,
+        )
+
+    @staticmethod
+    def _to_list_item(job: JobRecord) -> JobListItem:
+        return JobListItem(
+            job_id=job.job_id,
+            original_filename=job.original_filename,
+            status=job.status,
+            page_count=job.page_count,
+            duration_ms=job.duration_ms,
+            cache_hit=job.cache_hit,
+            created_at=job.created_at,
+            force_extractor=job.policy.force_extractor,
         )
 
     async def mark_status(self, job_id: str, status: JobStatus) -> JobRecord:

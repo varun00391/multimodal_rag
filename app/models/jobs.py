@@ -78,6 +78,7 @@ class JobStatusResponse(BaseModel):
     job_id: str
     document_id: str
     status: JobStatus
+    original_filename: str | None = None
     page_count: int
     sha256: str
     policy: ExtractionPolicy
@@ -87,6 +88,17 @@ class JobStatusResponse(BaseModel):
     cache_hit: bool = False
     created_at: datetime
     updated_at: datetime
+
+
+class JobListItem(BaseModel):
+    job_id: str
+    original_filename: str | None = None
+    status: JobStatus
+    page_count: int
+    duration_ms: int | None = None
+    cache_hit: bool = False
+    created_at: datetime
+    force_extractor: str | None = None
 
 
 class ValidatedPdfInput(BaseModel):

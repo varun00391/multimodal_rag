@@ -93,6 +93,7 @@ async def test_upload_valid_pdf_returns_202(client: AsyncClient, tmp_settings: S
     job = await _wait_for_terminal_status(client, payload["job_id"])
     assert job["status"] in {"completed", "completed_with_warnings"}
     assert job["page_count"] == 1
+    assert job["original_filename"] == "sample.pdf"
     assert len(job["sha256"]) == 64
     workspace = Path(tmp_settings.extraction_output_dir) / job["document_id"]
     assert (workspace / "source.pdf").exists()
@@ -174,3 +175,52 @@ async def test_openapi_hides_benchmark_form_fields(client: AsyncClient) -> None:
     assert "force_extractor" not in schema["properties"]
     assert "compare_extractors" not in schema["properties"]
     assert "file" in schema["properties"]
+
+
+@pytest.mark.asyncio
+async def test_ui_config(client: AsyncClient) -> None:
+    response = await client.get("/api/v1/ui-config")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["max_file_bytes"] == 1_048_576
+    assert payload["max_pages"] == 500
+    assert payload["benchmark_enabled"] is False
+    assert payload["allow_managed_apis_default"] is True
+
+
+@pytest.mark.asyncio
+async def test_list_extractions_newest_first(client: AsyncClient) -> None:
+    first = await client.post(
+        "/api/v1/extractions",
+        files={"file": ("first.pdf", make_pdf_bytes("one"), "application/pdf")},
+    )
+    second = await client.post(
+        "/api/v1/extractions",
+        files={"file": ("second.pdf", make_pdf_bytes("two"), "application/pdf")},
+    )
+    assert first.status_code == 202
+    assert second.status_code == 202
+
+    listing = await client.get("/api/v1/extractions?limit=50")
+    assert listing.status_code == 200
+    rows = listing.json()
+    job_ids = [row["job_id"] for row in rows]
+    assert second.json()["job_id"] in job_ids
+    assert first.json()["job_id"] in job_ids
+    assert job_ids.index(second.json()["job_id"]) < job_ids.index(first.json()["job_id"])
+    newest = next(row for row in rows if row["job_id"] == second.json()["job_id"])
+    assert newest["original_filename"] == "second.pdf"
+    assert newest["page_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_source_pdf_download(client: AsyncClient) -> None:
+    created = await client.post(
+        "/api/v1/extractions",
+        files={"file": ("paper.pdf", make_pdf_bytes(), "application/pdf")},
+    )
+    job_id = created.json()["job_id"]
+    source = await client.get(f"/api/v1/extractions/{job_id}/source")
+    assert source.status_code == 200
+    assert source.headers["content-type"].startswith("application/pdf")
+    assert source.content.startswith(b"%PDF-")

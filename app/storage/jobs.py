@@ -102,6 +102,20 @@ class JobStore:
             return None
         return self._row_to_job(row)
 
+    async def list_jobs(self, *, limit: int = 50) -> list[JobRecord]:
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT * FROM extraction_jobs
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ) as cursor:
+                rows = await cursor.fetchall()
+        return [self._row_to_job(row) for row in rows]
+
     async def update_status(
         self,
         job_id: str,

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.datastructures import FormData
 
@@ -50,6 +50,16 @@ async def health() -> dict[str, str]:
 @router.get("/metrics")
 async def metrics() -> dict:
     return get_metrics().snapshot()
+
+
+@router.get("/ui-config")
+async def ui_config(settings: Settings = Depends(get_settings)) -> dict:
+    return {
+        "max_file_bytes": settings.extraction_max_file_bytes,
+        "max_pages": settings.extraction_max_pages,
+        "benchmark_enabled": settings.extraction_benchmark_enabled,
+        "allow_managed_apis_default": settings.extraction_allow_managed_apis,
+    }
 
 
 @router.post(
@@ -142,6 +152,15 @@ async def create_extraction(
     )
 
 
+@router.get("/extractions")
+async def list_extractions(
+    limit: int = Query(default=50, ge=1, le=100),
+    job_service: JobService = Depends(get_job_service),
+) -> JSONResponse:
+    jobs = await job_service.list_jobs(limit=limit)
+    return JSONResponse(content=[item.model_dump(mode="json") for item in jobs])
+
+
 @router.get("/extractions/{job_id}")
 async def get_extraction_status(
     job_id: str,
@@ -183,6 +202,25 @@ async def get_extraction_report(
         raise ResultNotReadyError(job_id, "extraction-report.json")
 
     return JSONResponse(content=json.loads(report_path.read_text(encoding="utf-8")))
+
+
+@router.get("/extractions/{job_id}/source")
+async def get_extraction_source(
+    job_id: str,
+    job_service: JobService = Depends(get_job_service),
+) -> FileResponse:
+    job = await job_service.require_job_record(job_id)
+    source = Path(job.source_path)
+    if not source.exists() or not source.is_file():
+        raise ResultNotReadyError(job_id, "source.pdf")
+    filename = job.original_filename or "source.pdf"
+    if not filename.lower().endswith(".pdf"):
+        filename = f"{filename}.pdf"
+    return FileResponse(
+        source,
+        media_type="application/pdf",
+        filename=filename,
+    )
 
 
 @router.get("/extractions/{job_id}/assets/{asset_path:path}")

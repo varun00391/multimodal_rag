@@ -15,6 +15,14 @@ class Settings(BaseSettings):
     app_env: str = Field(default="development", alias="APP_ENV")
     app_host: str = Field(default="0.0.0.0", alias="APP_HOST")
     app_port: int = Field(default=8010, alias="APP_PORT")
+    cors_origins: str = Field(
+        default=(
+            "http://localhost:5173,http://127.0.0.1:5173,"
+            "http://localhost:3000,http://127.0.0.1:3000,"
+            "http://localhost:8080,http://127.0.0.1:8080"
+        ),
+        alias="CORS_ORIGINS",
+    )
 
     extraction_schema_version: str = Field(default="1.0", alias="EXTRACTION_SCHEMA_VERSION")
     extraction_routing_policy_version: str = Field(
@@ -142,6 +150,10 @@ class Settings(BaseSettings):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [part.strip() for part in self.cors_origins.split(",") if part.strip()]
 
     @property
     def resolved_cache_dir(self) -> Path:

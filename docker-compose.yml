@@ -12,6 +12,7 @@ services:
       EXTRACTION_OUTPUT_DIR: /app/output
       EXTRACTION_DATABASE_PATH: /app/data/extraction_jobs.db
       HF_HOME: /app/.cache/huggingface
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,http://127.0.0.1:8080
     volumes:
       - ./output:/app/output
       - ./data:/app/data
@@ -23,6 +24,17 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: pdf-extraction-ui
+    ports:
+      - "3000:80"
+    depends_on:
+      extraction-api:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   huggingface-cache:

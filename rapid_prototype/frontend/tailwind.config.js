@@ -4,20 +4,27 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: "#07080c",
-        panel: "#10131a",
-        line: "rgba(255,255,255,0.08)",
-        cream: "#f3eee4",
-        mute: "#8b93a7",
-        lime: "#d7ff3c",
-        mist: "#9bb7ff",
+        ink: "#F4F3EF",
+        panel: "#FFFFFF",
+        line: "rgba(17, 17, 16, 0.08)",
+        cream: "#111110",
+        mute: "#73726C",
+        lime: "#111110",
+        mist: "#6D5EF7",
       },
       fontFamily: {
-        sans: ["Plus Jakarta Sans", "ui-sans-serif", "system-ui"],
-        serif: ["Instrument Serif", "Georgia", "serif"],
+        sans: ["Outfit", "ui-sans-serif", "system-ui"],
+        serif: ["Fraunces", "Georgia", "serif"],
+      },
+      fontSize: {
+        display: ["4.5rem", { lineHeight: "0.92", letterSpacing: "-0.04em" }],
       },
       boxShadow: {
-        glow: "0 0 80px rgba(215, 255, 60, 0.12)",
+        glow: "0 30px 80px rgba(17, 17, 16, 0.08)",
+        lift: "0 1px 2px rgba(17, 17, 16, 0.04), 0 8px 24px rgba(17, 17, 16, 0.04)",
+      },
+      borderRadius: {
+        shell: "28px",
       },
     },
   },

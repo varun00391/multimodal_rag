@@ -31,16 +31,17 @@ export default function Settings() {
 
   return (
     <div className="p-8 max-w-xl">
-      <h1 className="font-serif text-4xl mb-2">Settings</h1>
-      <p className="text-sm text-mute mb-8">Workspace defaults for generation. Leave the key empty to use extractive RAG.</p>
-      <form onSubmit={save} className="space-y-5">
+      <p className="kicker mb-2">Workspace</p>
+      <h1 className="font-serif text-4xl tracking-tight mb-2">Settings</h1>
+      <p className="text-sm text-mute mb-8 font-light">Defaults for generation. Leave the key empty to use extractive RAG.</p>
+      <form onSubmit={save} className="card p-6 space-y-5">
         <div>
-          <label className="text-xs text-mute">Display name</label>
-          <input className="mt-1 w-full rounded-xl bg-panel border border-line px-4 py-3 text-sm" value={name} onChange={(e) => setName(e.target.value)} />
+          <label className="text-[11px] text-mute">Display name</label>
+          <input className="field mt-1.5" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div>
-          <label className="text-xs text-mute">Default model</label>
-          <select className="mt-1 w-full rounded-xl bg-panel border border-line px-4 py-3 text-sm" value={model} onChange={(e) => setModel(e.target.value)}>
+          <label className="text-[11px] text-mute">Default model</label>
+          <select className="field mt-1.5" value={model} onChange={(e) => setModel(e.target.value)}>
             <option>gpt-4o-mini</option>
             <option>gpt-4o</option>
             <option>claude-3.5-sonnet</option>
@@ -49,19 +50,19 @@ export default function Settings() {
           </select>
         </div>
         <div>
-          <label className="text-xs text-mute">OpenAI API key (optional)</label>
+          <label className="text-[11px] text-mute">OpenAI API key (optional)</label>
           <input
-            className="mt-1 w-full rounded-xl bg-panel border border-line px-4 py-3 text-sm"
+            className="field mt-1.5"
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             placeholder="sk-…"
           />
-          <p className="text-[11px] text-mute mt-2">
+          <p className="text-[11px] text-mute mt-2 font-light">
             Stored on this user record for the prototype. Without a key, Nexus still retrieves and answers extractively.
           </p>
         </div>
-        <button disabled={busy} className="rounded-xl bg-lime text-ink font-semibold px-4 py-2.5 text-sm">
+        <button disabled={busy} className="btn-primary">
           {busy ? "Saving…" : "Save settings"}
         </button>
         {msg && <p className="text-sm text-mute">{msg}</p>}

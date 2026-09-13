@@ -57,10 +57,11 @@ export default function Library() {
     <div className="p-8 max-w-6xl mx-auto">
       <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
         <div>
-          <h1 className="font-serif text-4xl">Library</h1>
-          <p className="text-sm text-mute mt-1">PDFs, images, video, sheets, and anything else you want to ask.</p>
+          <p className="kicker mb-2">Corpus</p>
+          <h1 className="font-serif text-4xl tracking-tight">Library</h1>
+          <p className="text-sm text-mute mt-2 font-light">PDFs, images, video, sheets, and anything else you want to ask.</p>
         </div>
-        <label className="rounded-xl bg-lime text-ink text-sm font-semibold px-4 py-2.5 cursor-pointer inline-flex items-center gap-2">
+        <label className="btn-primary cursor-pointer">
           <Upload size={15} /> {busy ? "Indexing…" : "Add files"}
           <input type="file" multiple className="hidden" onChange={(e) => upload(e.target.files)} />
         </label>
@@ -77,8 +78,8 @@ export default function Library() {
           setDrag(false);
           upload(e.dataTransfer.files);
         }}
-        className={`rounded-3xl border border-dashed p-10 text-center mb-8 transition ${
-          drag ? "border-lime bg-lime/10" : "border-line bg-white/[0.02]"
+        className={`rounded-[24px] border border-dashed p-12 text-center mb-8 transition ${
+          drag ? "border-mist bg-mist/5" : "border-line bg-ink/60"
         }`}
       >
         <p className="text-sm text-mute">Drop PDFs, images, video, audio, Word, PowerPoint, or Excel here.</p>
@@ -88,22 +89,22 @@ export default function Library() {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="Filter by filename"
-        className="mb-6 w-full max-w-sm rounded-xl bg-panel border border-line px-4 py-2.5 text-sm outline-none"
+        className="field mb-6 max-w-sm"
       />
 
-      {error && <p className="text-sm text-red-300 mb-4">{error}</p>}
+      {error && <p className="text-sm text-rose-700 mb-4">{error}</p>}
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {filtered.map((d) => {
           const Icon = ICONS[d.modality] || FileText;
           return (
-            <article key={d.id} className="rounded-2xl border border-line p-4 bg-white/[0.02]">
+            <article key={d.id} className="card p-4 hover:shadow-lift transition">
               <div className="flex items-start justify-between gap-3">
-                <div className="h-10 w-10 rounded-xl bg-lime/10 text-lime grid place-items-center">
-                  <Icon size={18} />
+                <div className="h-10 w-10 rounded-2xl bg-ink text-cream grid place-items-center">
+                  <Icon size={18} strokeWidth={1.7} />
                 </div>
                 <button
-                  className="text-mute hover:text-red-300"
+                  className="text-mute hover:text-rose-700"
                   onClick={async () => {
                     await api(`/documents/${d.id}`, { method: "DELETE" });
                     load();
@@ -112,11 +113,12 @@ export default function Library() {
                   <Trash2 size={15} />
                 </button>
               </div>
-              <h3 className="mt-3 text-sm font-medium truncate" title={d.filename}>
+              <h3 className="mt-4 text-sm font-medium truncate" title={d.filename}>
                 {d.filename}
               </h3>
-              <p className="text-[11px] text-mute mt-1">
-                {d.modality} · {d.source} · {bytes(d.size_bytes)} · {d.chunk_count} chunks
+              <p className="text-[11px] text-mute mt-1.5">
+                <span className="text-mist">{d.modality}</span>
+                <span> · {d.source} · {bytes(d.size_bytes)} · {d.chunk_count} chunks</span>
               </p>
             </article>
           );

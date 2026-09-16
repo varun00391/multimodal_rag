@@ -37,6 +37,8 @@ The system must minimize information loss and preserve enough evidence to trace 
 
 ---
 
+
+
 # 2. Core Mental Model
 
 The implementation should follow:
@@ -95,7 +97,11 @@ Generate JSON / Markdown / assets
 
 ---
 
+
+
 # 3. Most Important Architecture Rule
+
+
 
 ## Page is NOT the extraction unit.
 
@@ -130,6 +136,8 @@ Elements / sub-elements
 Extraction decisions should happen primarily at the **region level**, not the whole-page level.
 
 ---
+
+
 
 # 4. High-Level Architecture
 
@@ -217,6 +225,8 @@ Extraction decisions should happen primarily at the **region level**, not the wh
 
 ---
 
+
+
 # 5. Recommended Technology Strategy
 
 Use specialized tools rather than a single parser.
@@ -245,6 +255,8 @@ Do not make PyMuPDF responsible for semantic classification.
 
 ---
 
+
+
 ## OCR
 
 Use OCR as an evidence source, especially for scanned or rasterized regions.
@@ -272,6 +284,8 @@ class OCREngine:
 
 ---
 
+
+
 ## Layout / Region detection
 
 Responsibilities:
@@ -292,6 +306,8 @@ custom object-detection / document-layout models
 Do not assume one library is responsible for the whole pipeline.
 
 ---
+
+
 
 ## Table extraction
 
@@ -323,6 +339,8 @@ Tables should preserve:
 
 ---
 
+
+
 ## Visual understanding
 
 Use a VLM selectively.
@@ -344,6 +362,8 @@ Do not send every page or every image to the VLM.
 Route only when necessary.
 
 ---
+
+
 
 # 6. Project Structure
 
@@ -445,7 +465,11 @@ pdf-extractor/
 
 ---
 
+
+
 # 7. Step-by-Step Runtime Workflow
+
+
 
 ## Step 1 — Upload
 
@@ -481,6 +505,8 @@ Response:
 ```
 
 ---
+
+
 
 # 8. Step 2 — PDF Profiling
 
@@ -519,6 +545,8 @@ This is **profiling**, not final content classification.
 
 ---
 
+
+
 # 9. Step 3 — Render Pages
 
 Render pages to images:
@@ -543,6 +571,8 @@ Recommended metadata:
 Keep the rendering configuration reproducible.
 
 ---
+
+
 
 # 10. Step 4 — Native PDF Extraction
 
@@ -584,6 +614,8 @@ Example:
 ```
 
 ---
+
+
 
 # 11. Step 5 — Region Detection
 
@@ -631,6 +663,8 @@ This is the key routing decision.
 
 ---
 
+
+
 # 12. Step 6 — Build the Region Tree
 
 Regions may contain sub-regions.
@@ -663,6 +697,8 @@ Table
 The data model must allow parent/child relationships.
 
 ---
+
+
 
 # 13. Step 7 — Region Routing
 
@@ -697,6 +733,8 @@ This is a starting point, not a hard-coded final design.
 
 ---
 
+
+
 # 14. Step 8 — Text Extraction Strategy
 
 For text regions:
@@ -722,6 +760,8 @@ Is text usable?
 Do not OCR clean native text unnecessarily.
 
 ---
+
+
 
 # 15. Step 9 — Table Extraction Strategy
 
@@ -769,6 +809,8 @@ caption
 
 ---
 
+
+
 # 16. Step 10 — Image Extraction
 
 For an image region:
@@ -791,6 +833,8 @@ Image
 ```
 
 ---
+
+
 
 # 17. Step 11 — Chart Extraction
 
@@ -826,6 +870,8 @@ Do not rely only on a generated textual summary.
 Always preserve the original chart image.
 
 ---
+
+
 
 # 18. Step 12 — Diagram Extraction
 
@@ -871,6 +917,8 @@ Example:
 ```
 
 ---
+
+
 
 # 19. Step 13 — Evidence Reconciliation
 
@@ -934,6 +982,8 @@ Never silently discard the rejected candidate.
 
 ---
 
+
+
 # 20. Step 14 — Validation Engine
 
 Validation can include:
@@ -944,17 +994,23 @@ Validation can include:
 Native = OCR = VLM
 ```
 
+
+
 ## OCR confidence
 
 ```text
 word_confidence
 ```
 
+
+
 ## Structural consistency
 
 ```text
 table rows/columns make sense
 ```
+
+
 
 ## Arithmetic consistency
 
@@ -963,12 +1019,16 @@ qty × price = total
 subtotal + tax = grand total
 ```
 
+
+
 ## Cross-reference consistency
 
 ```text
 "Figure 5" mentioned in text
 → Figure 5 exists
 ```
+
+
 
 ## Spatial consistency
 
@@ -977,6 +1037,8 @@ caption is near figure
 ```
 
 ---
+
+
 
 # 21. Step 15 — Confidence Score
 
@@ -1008,6 +1070,8 @@ Example:
 Make thresholds configurable.
 
 ---
+
+
 
 # 22. Step 16 — Human Review
 
@@ -1044,6 +1108,8 @@ Human corrections should be stored as feedback data.
 
 ---
 
+
+
 # 23. Step 17 — Reading Order
 
 After individual regions are extracted, determine document reading order.
@@ -1079,6 +1145,8 @@ Reading order should be stored separately from spatial position.
 
 ---
 
+
+
 # 24. Step 18 — Context and Relationships
 
 Build relationships such as:
@@ -1104,6 +1172,8 @@ Do not discard spatial relationships just because semantic relationships exist.
 Keep both.
 
 ---
+
+
 
 # 25. Step 19 — Canonical Document Model
 
@@ -1171,6 +1241,8 @@ relationships
 
 ---
 
+
+
 # 26. Provenance Model
 
 Every important extracted value should have provenance.
@@ -1203,6 +1275,8 @@ This lets you answer:
 > Where did this data come from?
 
 ---
+
+
 
 # 27. Output Layer
 
@@ -1244,7 +1318,11 @@ artifacts/
 
 ---
 
+
+
 # 28. API Design
+
+
 
 ## Upload
 
@@ -1252,11 +1330,15 @@ artifacts/
 POST /documents
 ```
 
+
+
 ## Document status
 
 ```http
 GET /documents/{document_id}
 ```
+
+
 
 ## Pages
 
@@ -1264,11 +1346,15 @@ GET /documents/{document_id}
 GET /documents/{document_id}/pages
 ```
 
+
+
 ## Regions
 
 ```http
 GET /documents/{document_id}/regions
 ```
+
+
 
 ## Tables
 
@@ -1276,11 +1362,15 @@ GET /documents/{document_id}/regions
 GET /documents/{document_id}/tables
 ```
 
+
+
 ## Figures
 
 ```http
 GET /documents/{document_id}/figures
 ```
+
+
 
 ## Full representation
 
@@ -1288,11 +1378,15 @@ GET /documents/{document_id}/figures
 GET /documents/{document_id}/representation
 ```
 
+
+
 ## Review queue
 
 ```http
 GET /documents/{document_id}/review-items
 ```
+
+
 
 ## Submit review decision
 
@@ -1301,6 +1395,8 @@ POST /review-items/{review_id}
 ```
 
 ---
+
+
 
 # 29. Job State Machine
 
@@ -1336,6 +1432,8 @@ CANCELLED
 
 ---
 
+
+
 # 30. Error Handling
 
 Do not hide failures.
@@ -1367,6 +1465,8 @@ A document can still complete with warnings:
 
 ---
 
+
+
 # 31. Efficient Routing Strategy
 
 Avoid maximum-compute processing.
@@ -1383,6 +1483,8 @@ OCR
 VLM
 ```
 
+
+
 ## Table
 
 ```text
@@ -1390,6 +1492,8 @@ Table extractor
   ↓ if uncertain
 OCR + VLM verification
 ```
+
+
 
 ## Visual
 
@@ -1402,6 +1506,8 @@ VLM
 This reduces cost and latency.
 
 ---
+
+
 
 # 32. Important Principle: Preserve Evidence, Not Just Results
 
@@ -1426,6 +1532,8 @@ The structured answer is a derived representation.
 The original PDF is always the ultimate source of truth.
 
 ---
+
+
 
 # 33. Example End-to-End Invoice
 
@@ -1480,6 +1588,8 @@ JSON + Markdown + assets
 
 ---
 
+
+
 # 34. MVP Implementation Order
 
 Do NOT build all capabilities at once.
@@ -1506,6 +1616,8 @@ PDF → basic structured JSON
 
 ---
 
+
+
 ## Phase 2 — OCR and scanned PDFs
 
 Add:
@@ -1527,6 +1639,8 @@ digital + scanned + hybrid
 
 ---
 
+
+
 ## Phase 3 — Region intelligence
 
 Add:
@@ -1545,6 +1659,8 @@ one page → multiple regions → different extractors
 ```
 
 ---
+
+
 
 ## Phase 4 — Tables and visuals
 
@@ -1567,6 +1683,8 @@ text + tables + visuals
 
 ---
 
+
+
 ## Phase 5 — Validation
 
 Add:
@@ -1586,6 +1704,8 @@ reliable extraction
 ```
 
 ---
+
+
 
 ## Phase 6 — Context
 
@@ -1608,6 +1728,8 @@ context-preserving document model
 
 ---
 
+
+
 ## Phase 7 — Production
 
 Add:
@@ -1626,6 +1748,8 @@ Add:
 ```
 
 ---
+
+
 
 # 35. Initial MVP Scope
 
@@ -1660,6 +1784,8 @@ Leave advanced features for later:
 ```
 
 ---
+
+
 
 # 36. Testing Strategy
 
@@ -1702,7 +1828,11 @@ Do not evaluate the entire system only with one score.
 
 ---
 
+
+
 # 37. Practical Development Rules
+
+
 
 ## Rule 1
 
@@ -1746,6 +1876,8 @@ Canonical Document Model is the central internal contract.
 
 ---
 
+
+
 # 38. Recommended First Technical Milestone
 
 Build this small pipeline first:
@@ -1788,6 +1920,8 @@ Get the deterministic evidence pipeline correct first.
 
 ---
 
+
+
 # 39. Final Implementation Mental Model
 
 When coding, repeatedly ask these questions:
@@ -1798,11 +1932,15 @@ When coding, repeatedly ask these questions:
 PDF-native objects + rendered pixels
 ```
 
+
+
 ### 2. Where is it?
 
 ```text
 page + bbox
 ```
+
+
 
 ### 3. What is it?
 
@@ -1810,11 +1948,15 @@ page + bbox
 text / table / image / chart / diagram / ...
 ```
 
+
+
 ### 4. Which extractor is best?
 
 ```text
 PyMuPDF / OCR / table engine / VLM / combination
 ```
+
+
 
 ### 5. Do multiple sources agree?
 
@@ -1823,6 +1965,8 @@ yes → stronger confidence
 no  → conflict
 ```
 
+
+
 ### 6. Is the result structurally/semantically consistent?
 
 ```text
@@ -1830,11 +1974,15 @@ yes → pass
 no  → review
 ```
 
+
+
 ### 7. How does it relate to the rest of the document?
 
 ```text
 reading order + hierarchy + relationships
 ```
+
+
 
 ### 8. Can I trace it back to the original PDF?
 
@@ -1845,6 +1993,8 @@ document → page → bbox → source evidence
 If the answer to all eight is yes, the system is moving toward a reliable document-understanding platform.
 
 ---
+
+
 
 # 40. One-Line Architecture
 
@@ -1863,4 +2013,3 @@ PDF
 ```
 
 This is the implementation blueprint to follow.
-

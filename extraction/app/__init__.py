@@ -1,1 +1,0 @@
-"""Multimodal PDF extraction service."""

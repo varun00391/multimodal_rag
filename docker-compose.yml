@@ -8,6 +8,9 @@ services:
     environment:
       EXTRACTION_WORKSPACE: /app/output
       EXTRACTION_MODEL_CACHE: /app/models
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     volumes:
       - ./output:/app/output
       - extraction_models:/app/models

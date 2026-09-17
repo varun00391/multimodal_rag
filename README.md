@@ -1,12 +1,12 @@
-# Extraction Service
+# Extraction + RAG service
 
-FastAPI service that turns uploaded files into a canonical `document.json`. No CLI. No chunking or embeddings.
+FastAPI service that turns uploaded files into a canonical `document.json`, then indexes parent-child chunks into Qdrant Cloud and answers questions with Groq.
 
 ## Run with Docker
 
 ```bash
 cp .env.example .env
-# fill EURI_API_KEY (required only for chart/photo images and some video frames)
+# fill EURI_API_KEY, GROQ_API_KEY, QDRANT_URL, QDRANT_API_KEY
 docker compose up --build
 ```
 
@@ -16,7 +16,12 @@ Health check: `GET http://localhost:8000/health`
 curl -F "file=@sample.pdf" http://localhost:8000/api/v1/extractions
 curl http://localhost:8000/api/v1/extractions/{job_id}
 curl http://localhost:8000/api/v1/extractions/{job_id}/document
+curl -X POST http://localhost:8000/api/v1/index -H 'Content-Type: application/json' -d '{"job_id":"{job_id}"}'
+curl -X POST http://localhost:8000/api/v1/ask -H 'Content-Type: application/json' \
+  -d '{"question":"What is the leave policy?","job_id":"{job_id}"}'
 ```
+
+`POST /api/v1/ask` can omit `job_id` to search every indexed document.
 
 ## Run locally (without OCR/Whisper)
 
@@ -26,6 +31,10 @@ uvicorn extraction.app:app --reload --app-dir src
 ```
 
 Install OCR, Whisper, and Paddle with `python -m pip install -e ".[media]"`.
+
+## RAG
+
+Indexing walks `document.json` (not the original file). Children are embedded with Euron `gemini-embedding-2-preview` (768-d) and stored in Qdrant Cloud. `/ask` retrieves children, expands unique parents, and answers with Groq.
 
 ## Routing
 

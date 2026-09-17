@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,6 +40,33 @@ class Settings(BaseSettings):
         alias="GROQ_BASE_URL",
     )
     groq_llm_model: str = Field(default="llama-3.3-70b-versatile", alias="GROQ_LLM_MODEL")
+
+    qdrant_url: str = Field(default="", alias="QDRANT_URL")
+    qdrant_api_key: str = Field(default="", alias="QDRANT_API_KEY")
+    qdrant_collection: str = Field(default="extraction_chunks", alias="QDRANT_COLLECTION")
+    euri_embedding_model: str = Field(
+        default="gemini-embedding-2-preview",
+        alias="EURI_EMBEDDING_MODEL",
+    )
+    euri_embedding_dims: int = Field(default=768, alias="EURI_EMBEDDING_DIMS")
+    rag_chunk_chars: int = Field(default=800, alias="RAG_CHUNK_CHARS")
+    rag_chunk_overlap: int = Field(default=120, alias="RAG_CHUNK_OVERLAP")
+    rag_child_top_k: int = Field(default=8, alias="RAG_CHILD_TOP_K")
+    rag_parent_limit: int = Field(default=3, alias="RAG_PARENT_LIMIT")
+
+    @field_validator(
+        "euri_api_key",
+        "groq_api_key",
+        "qdrant_api_key",
+        "qdrant_url",
+        "euri_base_url",
+        mode="before",
+    )
+    @classmethod
+    def _strip_secrets(cls, value):
+        if isinstance(value, str):
+            return value.strip()
+        return value
 
     @property
     def jobs_db_path(self) -> Path:

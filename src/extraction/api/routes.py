@@ -1,21 +1,52 @@
 from __future__ import annotations
 
+import asyncio
+import uuid
+
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
 from extraction.errors import ExtractionError
 from extraction.intake import document_dir, intake_file
 from extraction.jobs.store import JobStore
+from extraction.rag.service import ask_question, index_document
 from extraction.settings import get_settings
 from extraction.store import load_document, load_report, resolve_under
-
-import uuid
 
 router = APIRouter()
 
 
 def job_store() -> JobStore:
     return JobStore(get_settings().jobs_db_path)
+
+
+def _http_error(exc: ExtractionError) -> HTTPException:
+    status = {
+        "JOB_NOT_FOUND": 404,
+        "DOCUMENT_NOT_FOUND": 404,
+        "JOB_NOT_READY": 409,
+        "DOCUMENT_FAILED": 400,
+        "NO_CHUNKS": 400,
+        "EMPTY_QUESTION": 400,
+        "QDRANT_NOT_CONFIGURED": 503,
+        "QDRANT_UNAVAILABLE": 503,
+        "EMBEDDINGS_UNAVAILABLE": 503,
+        "EMBEDDINGS_UNAUTHORIZED": 401,
+        "LLM_UNAVAILABLE": 503,
+        "EMBEDDINGS_FAILED": 502,
+        "LLM_EMPTY": 502,
+    }.get(exc.code, 400)
+    return HTTPException(status_code=status, detail={"code": exc.code, "message": exc.message})
+
+
+class IndexRequest(BaseModel):
+    job_id: str
+
+
+class AskRequest(BaseModel):
+    question: str
+    job_id: str | None = Field(default=None)
 
 
 @router.get("/health")
@@ -105,3 +136,19 @@ def get_asset(job_id: str, asset_path: str):
     if not target.is_file():
         raise HTTPException(status_code=404, detail="ASSET_NOT_FOUND")
     return FileResponse(target)
+
+
+@router.post("/api/v1/index")
+async def create_index(body: IndexRequest) -> dict:
+    try:
+        return await asyncio.to_thread(index_document, get_settings(), job_store(), body.job_id)
+    except ExtractionError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post("/api/v1/ask")
+async def create_ask(body: AskRequest) -> dict:
+    try:
+        return await asyncio.to_thread(ask_question, get_settings(), job_store(), body.question, body.job_id)
+    except ExtractionError as exc:
+        raise _http_error(exc) from exc

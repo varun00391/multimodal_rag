@@ -14,6 +14,12 @@ def _client(api_key: str, base_url: str) -> OpenAI:
     return OpenAI(api_key=api_key, base_url=base_url.rstrip("/"))
 
 
+def get_euron_client(settings: Settings) -> OpenAI | None:
+    if not settings.euri_api_key:
+        return None
+    return _client(settings.euri_api_key, settings.euri_base_url)
+
+
 def describe_image(settings: Settings, path: Path, report: ExtractionReport, purpose: str) -> str | None:
     if not settings.euri_api_key:
         report.model_calls.append(

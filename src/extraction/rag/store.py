@@ -1,15 +1,20 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Protocol
-
 from urllib.parse import urlparse, urlunparse
 
 from extraction.errors import ExtractionError
 from extraction.rag.models import ChildChunk, ChildHit
+from extraction.rag.retrieve import fuse_rrf
+from extraction.rag.sparse import bm25_score, sparse_pairs, sparse_tf
 from extraction.settings import Settings
 
+LOGGER = logging.getLogger(__name__)
 POINT_NAMESPACE = uuid.UUID("8c4b1424-46bf-46b6-8dc0-7f0268d891cd")
+DENSE_NAME = "dense"
+BM25_NAME = "bm25"
 
 
 def normalize_qdrant_url(url: str) -> str:
@@ -79,6 +84,8 @@ def _hit_from_payload(payload: dict, score: float) -> ChildHit:
         t_start=payload.get("t_start"),
         t_end=payload.get("t_end"),
         document_id=payload.get("document_id", ""),
+        dense_score=score,
+        bm25_hit=False,
     )
 
 
@@ -94,7 +101,10 @@ class ChunkStore(Protocol):
     def query(
         self,
         vector: list[float],
+        query_text: str,
         limit: int,
+        prefetch: int,
+        rrf_k: int,
         document_id: str | None = None,
     ) -> list[ChildHit]: ...
 
@@ -103,7 +113,7 @@ class MemoryChunkStore:
     _stores: dict[str, "MemoryChunkStore"] = {}
 
     def __init__(self) -> None:
-        self.points: list[tuple[str, list[float], dict]] = []
+        self.points: list[tuple[str, list[float], dict[int, float], dict]] = []
 
     @classmethod
     def get(cls, collection: str) -> "MemoryChunkStore":
@@ -124,25 +134,61 @@ class MemoryChunkStore:
         children: list[ChildChunk],
         vectors: list[list[float]],
     ) -> int:
-        self.points = [point for point in self.points if point[2].get("document_id") != document_id]
+        self.points = [point for point in self.points if point[3].get("document_id") != document_id]
         for child, vector in zip(children, vectors):
-            self.points.append((point_id_for(child.child_id), vector, _payload(child, job_id)))
+            self.points.append(
+                (
+                    point_id_for(child.child_id),
+                    vector,
+                    sparse_tf(child.embed_text),
+                    _payload(child, job_id),
+                )
+            )
         return len(children)
 
     def query(
         self,
         vector: list[float],
+        query_text: str,
         limit: int,
+        prefetch: int,
+        rrf_k: int,
         document_id: str | None = None,
     ) -> list[ChildHit]:
-        scored: list[ChildHit] = []
-        for _point_id, stored, payload in self.points:
-            if document_id and payload.get("document_id") != document_id:
-                continue
+        candidates = [
+            point for point in self.points if not document_id or point[3].get("document_id") == document_id
+        ]
+        dense_hits: list[ChildHit] = []
+        for _point_id, stored, _sparse, payload in candidates:
             score = sum(left * right for left, right in zip(vector, stored))
-            scored.append(_hit_from_payload(payload, float(score)))
-        scored.sort(key=lambda hit: hit.score, reverse=True)
-        return scored[:limit]
+            dense_hits.append(_hit_from_payload(payload, float(score)))
+        dense_hits.sort(key=lambda hit: hit.score, reverse=True)
+        dense_hits = dense_hits[:prefetch]
+
+        query_tf = sparse_tf(query_text)
+        sparse_hits: list[ChildHit] = []
+        if query_tf and candidates:
+            doc_count = len(candidates)
+            df: dict[int, int] = {}
+            lengths = []
+            for _point_id, _stored, sparse, _payload in candidates:
+                lengths.append(sum(sparse.values()) or 1.0)
+                for term in sparse:
+                    df[term] = df.get(term, 0) + 1
+            avgdl = sum(lengths) / len(lengths)
+            for _point_id, _stored, sparse, payload in candidates:
+                score = bm25_score(query_tf, sparse, doc_count, df, avgdl)
+                if score <= 0:
+                    continue
+                hit = _hit_from_payload(payload, float(score))
+                hit.bm25_hit = True
+                sparse_hits.append(hit)
+            sparse_hits.sort(key=lambda hit: hit.score, reverse=True)
+            sparse_hits = sparse_hits[:prefetch]
+
+        if not sparse_hits:
+            return dense_hits[:limit]
+        return fuse_rrf(dense_hits, sparse_hits, rrf_k=rrf_k, limit=limit)
 
 
 class QdrantChunkStore:
@@ -166,12 +212,29 @@ class QdrantChunkStore:
         except Exception as exc:
             raise _qdrant_error(exc) from exc
 
+    def _schema_ok(self) -> bool:
+        info = self.client.get_collection(self.collection)
+        params = info.config.params
+        vectors = params.vectors
+        if not isinstance(vectors, dict) or DENSE_NAME not in vectors:
+            return False
+        sparse = params.sparse_vectors or {}
+        return BM25_NAME in sparse
+
     def _ensure_collection(self) -> None:
         models = self._models
+        if self.client.collection_exists(self.collection) and not self._schema_ok():
+            LOGGER.warning("Recreating Qdrant collection %s for hybrid dense+BM25 schema.", self.collection)
+            self.client.delete_collection(self.collection)
         if not self.client.collection_exists(self.collection):
             self.client.create_collection(
                 collection_name=self.collection,
-                vectors_config=models.VectorParams(size=self.dims, distance=models.Distance.COSINE),
+                vectors_config={
+                    DENSE_NAME: models.VectorParams(size=self.dims, distance=models.Distance.COSINE),
+                },
+                sparse_vectors_config={
+                    BM25_NAME: models.SparseVectorParams(modifier=models.Modifier.IDF),
+                },
             )
         for field in ("document_id", "parent_id"):
             try:
@@ -200,24 +263,59 @@ class QdrantChunkStore:
                     )
                 ),
             )
-            points = [
-                models.PointStruct(
-                    id=point_id_for(child.child_id),
-                    vector=vector,
-                    payload=_payload(child, job_id),
+            points = []
+            for child, vector in zip(children, vectors):
+                named = {DENSE_NAME: vector}
+                indices, values = sparse_pairs(child.embed_text)
+                if indices:
+                    named[BM25_NAME] = models.SparseVector(indices=indices, values=values)
+                points.append(
+                    models.PointStruct(
+                        id=point_id_for(child.child_id),
+                        vector=named,
+                        payload=_payload(child, job_id),
+                    )
                 )
-                for child, vector in zip(children, vectors)
-            ]
             for start in range(0, len(points), 64):
                 self.client.upsert(collection_name=self.collection, points=points[start : start + 64])
         except Exception as exc:
             raise _qdrant_error(exc) from exc
         return len(children)
 
+    def _search(
+        self,
+        query,
+        using: str,
+        limit: int,
+        query_filter,
+    ) -> list[ChildHit]:
+        result = self.client.query_points(
+            collection_name=self.collection,
+            query=query,
+            using=using,
+            limit=limit,
+            query_filter=query_filter,
+            with_payload=True,
+        )
+        hits = []
+        for point in result.points:
+            payload = dict(point.payload or {})
+            hit = _hit_from_payload(payload, float(point.score or 0.0))
+            hit.bm25_hit = using == BM25_NAME
+            if using == DENSE_NAME:
+                hit.dense_score = float(point.score or 0.0)
+            else:
+                hit.dense_score = None
+            hits.append(hit)
+        return hits
+
     def query(
         self,
         vector: list[float],
+        query_text: str,
         limit: int,
+        prefetch: int,
+        rrf_k: int,
         document_id: str | None = None,
     ) -> list[ChildHit]:
         models = self._models
@@ -227,20 +325,21 @@ class QdrantChunkStore:
                 must=[models.FieldCondition(key="document_id", match=models.MatchValue(value=document_id))]
             )
         try:
-            result = self.client.query_points(
-                collection_name=self.collection,
-                query=vector,
-                limit=limit,
-                query_filter=query_filter,
-                with_payload=True,
-            )
+            dense_hits = self._search(vector, DENSE_NAME, prefetch, query_filter)
+            indices, values = sparse_pairs(query_text)
+            sparse_hits: list[ChildHit] = []
+            if indices:
+                sparse_hits = self._search(
+                    models.SparseVector(indices=indices, values=values),
+                    BM25_NAME,
+                    prefetch,
+                    query_filter,
+                )
         except Exception as exc:
             raise _qdrant_error(exc) from exc
-        hits = []
-        for point in result.points:
-            payload = dict(point.payload or {})
-            hits.append(_hit_from_payload(payload, float(point.score or 0.0)))
-        return hits
+        if not sparse_hits:
+            return dense_hits[:limit]
+        return fuse_rrf(dense_hits, sparse_hits, rrf_k=rrf_k, limit=limit)
 
 
 def get_chunk_store(settings: Settings) -> ChunkStore:

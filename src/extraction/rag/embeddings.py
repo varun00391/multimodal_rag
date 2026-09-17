@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import math
 from pathlib import Path
 
@@ -9,7 +8,6 @@ from extraction.errors import ExtractionError
 from extraction.rag.models import ChildChunk
 from extraction.settings import Settings
 
-LOGGER = logging.getLogger(__name__)
 BATCH_SIZE = 32
 
 
@@ -62,59 +60,6 @@ def embed_texts(settings: Settings, texts: list[str]) -> list[list[float]]:
     return vectors
 
 
-def _embed_image(settings: Settings, path: Path, caption: str) -> list[float] | None:
-    import base64
-    import mimetypes
-
-    import httpx
-
-    if not settings.euri_api_key or not path.is_file():
-        return None
-    mime = mimetypes.guess_type(path.name)[0] or "image/png"
-    data_url = f"data:{mime};base64,{base64.b64encode(path.read_bytes()).decode('ascii')}"
-    url = settings.euri_base_url.rstrip("/") + "/embeddings"
-    payload = {
-        "model": settings.euri_embedding_model,
-        "dimensions": settings.euri_embedding_dims,
-        "input": [
-            {"type": "text", "text": caption or path.name},
-            {"type": "image_url", "image_url": {"url": data_url}},
-        ],
-    }
-    try:
-        response = httpx.post(
-            url,
-            headers={"Authorization": f"Bearer {settings.euri_api_key}"},
-            json=payload,
-            timeout=60.0,
-        )
-        if response.status_code >= 400:
-            LOGGER.info("Euron image embedding rejected (%s); using caption.", response.status_code)
-            return None
-        data = response.json()["data"]
-        vector = list(sorted(data, key=lambda item: item.get("index", 0))[0]["embedding"])
-        return l2_normalize(vector)
-    except Exception:
-        LOGGER.info("Euron image embedding failed; using caption.", exc_info=True)
-        return None
-
-
 def embed_children(settings: Settings, children: list[ChildChunk], assets_dir: Path) -> list[list[float]]:
-    vectors: list[list[float]] = []
-    text_indexes: list[int] = []
-    text_payloads: list[str] = []
-    for index, child in enumerate(children):
-        if child.modality == "image" and child.asset_path:
-            image_path = assets_dir / child.asset_path
-            image_vector = _embed_image(settings, image_path, child.child_text)
-            if image_vector is not None:
-                vectors.append(image_vector)
-                continue
-        vectors.append([])
-        text_indexes.append(index)
-        text_payloads.append(child.embed_text)
-    if text_payloads:
-        text_vectors = embed_texts(settings, text_payloads)
-        for index, vector in zip(text_indexes, text_vectors):
-            vectors[index] = vector
-    return vectors
+    del assets_dir
+    return embed_texts(settings, [child.embed_text for child in children])

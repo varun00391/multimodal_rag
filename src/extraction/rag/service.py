@@ -3,10 +3,10 @@ from __future__ import annotations
 from extraction.errors import ExtractionError
 from extraction.intake import document_dir
 from extraction.jobs.store import JobStore
-from extraction.rag.answer import answer_question
+from extraction.rag.answer import CANNOT_ANSWER, answer_question
 from extraction.rag.chunker import chunk_document
 from extraction.rag.embeddings import embed_children, embed_texts
-from extraction.rag.retrieve import expand_parents
+from extraction.rag.retrieve import apply_dense_cutoff, expand_parents
 from extraction.rag.store import get_chunk_store
 from extraction.settings import Settings
 from extraction.store import load_document
@@ -55,8 +55,18 @@ def ask_question(settings: Settings, jobs: JobStore, question: str, job_id: str 
         document_id = record.document_id
     query_vector = embed_texts(settings, [question])[0]
     store = get_chunk_store(settings)
-    hits = store.query(query_vector, settings.rag_child_top_k, document_id=document_id)
+    hits = store.query(
+        query_vector,
+        question,
+        limit=settings.rag_child_top_k,
+        prefetch=settings.rag_hybrid_prefetch,
+        rrf_k=settings.rag_rrf_k,
+        document_id=document_id,
+    )
+    hits = apply_dense_cutoff(hits, settings.rag_score_cutoff)
     parents = expand_parents(hits, settings.rag_parent_limit)
+    if not parents:
+        return {"answer": CANNOT_ANSWER, "sources": []}
     answer = answer_question(settings, question, parents)
     sources = []
     for parent in parents:

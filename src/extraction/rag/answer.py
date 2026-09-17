@@ -11,6 +11,7 @@ SYSTEM_PROMPT = (
     "Cite the filename and unit (page, slide, sheet, or time range) you used. "
     "Be concise and factual."
 )
+CANNOT_ANSWER = "I cannot answer from the indexed documents."
 
 
 def _parent_label(parent: RetrievedParent) -> str:

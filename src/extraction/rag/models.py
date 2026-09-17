@@ -39,6 +39,8 @@ class ChildHit(BaseModel):
     t_start: float | None = None
     t_end: float | None = None
     document_id: str
+    dense_score: float | None = None
+    bm25_hit: bool = False
 
 
 class RetrievedParent(BaseModel):

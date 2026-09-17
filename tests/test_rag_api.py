@@ -117,3 +117,83 @@ def test_embed_texts_maps_unauthorized_key(settings, monkeypatch) -> None:
     except ExtractionError as exc:
         raised = exc.code == "EMBEDDINGS_UNAUTHORIZED"
     assert raised
+
+
+def test_picture_children_embed_captions_not_image_bytes(settings, monkeypatch) -> None:
+    from extraction.rag.embeddings import embed_children
+    from extraction.rag.models import ChildChunk
+
+    seen: list[str] = []
+
+    def fake_embed_texts(settings, texts):
+        del settings
+        seen.extend(texts)
+        return [[0.0] * 8 for _ in texts]
+
+    monkeypatch.setattr("extraction.rag.embeddings.embed_texts", fake_embed_texts)
+    child = ChildChunk(
+        child_id="c1",
+        parent_id="p1",
+        parent_type="unit",
+        parent_text="chart",
+        child_text="Bar chart of headcount.",
+        embed_text="policy.pdf | page 2\nBar chart of headcount.",
+        element_type="picture",
+        modality="image",
+        unit_type="page",
+        unit_index=2,
+        filename="policy.pdf",
+        media_type="application/pdf",
+        document_id="doc",
+        asset_path="page-2.png",
+    )
+    embed_children(settings, [child], settings.workspace)
+    assert seen == [child.embed_text]
+
+
+def test_ask_cutoff_skips_groq(settings, monkeypatch) -> None:
+    from extraction.rag.answer import CANNOT_ANSWER
+    from extraction.rag.models import ChildHit
+    from extraction.rag.service import ask_question
+    from extraction.jobs.store import JobStore
+
+    monkeypatch.setenv("QDRANT_URL", "memory://tests")
+    monkeypatch.setenv("RAG_SCORE_CUTOFF", "0.40")
+    get_settings.cache_clear()
+    live = get_settings()
+
+    called = {"groq": False}
+
+    class _Store:
+        def query(self, *args, **kwargs):
+            del args, kwargs
+            return [
+                ChildHit(
+                    child_id="c1",
+                    parent_id="p1",
+                    parent_type="unit",
+                    parent_text="unrelated",
+                    child_text="unrelated",
+                    score=0.12,
+                    dense_score=0.12,
+                    bm25_hit=False,
+                    filename="a.pdf",
+                    unit_type="page",
+                    unit_index=1,
+                    element_type="paragraph",
+                    modality="text",
+                    document_id="doc",
+                )
+            ]
+
+    monkeypatch.setattr("extraction.rag.service.embed_texts", lambda _s, texts: [[0.1] * 8 for _ in texts])
+    monkeypatch.setattr("extraction.rag.service.get_chunk_store", lambda _s: _Store())
+    monkeypatch.setattr(
+        "extraction.rag.service.answer_question",
+        lambda *args, **kwargs: called.__setitem__("groq", True) or "should not run",
+    )
+    result = ask_question(live, JobStore(live.jobs_db_path), "What is Bitcoin?")
+    assert result["answer"] == CANNOT_ANSWER
+    assert result["sources"] == []
+    assert called["groq"] is False
+    get_settings.cache_clear()

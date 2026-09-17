@@ -34,7 +34,7 @@ Install OCR, Whisper, and Paddle with `python -m pip install -e ".[media]"`.
 
 ## RAG
 
-Indexing walks `document.json` (not the original file). Children are embedded with Euron `gemini-embedding-2-preview` (768-d) and stored in Qdrant Cloud. `/ask` retrieves children, expands unique parents, and answers with Groq.
+Indexing walks `document.json` (not the original file). Children are embedded with Euron `gemini-embedding-2-preview` (768-d text, including picture captions). Qdrant stores a dense vector plus a BM25 sparse vector. `/ask` fuses the two lists with RRF, drops dense-only hits below `RAG_SCORE_CUTOFF` (0.40), expands at most 3 parents, and answers with Groq.
 
 ## Routing
 

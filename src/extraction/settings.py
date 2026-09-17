@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     rag_chunk_overlap: int = Field(default=120, alias="RAG_CHUNK_OVERLAP")
     rag_child_top_k: int = Field(default=8, alias="RAG_CHILD_TOP_K")
     rag_parent_limit: int = Field(default=3, alias="RAG_PARENT_LIMIT")
+    rag_score_cutoff: float = Field(default=0.40, alias="RAG_SCORE_CUTOFF")
+    rag_hybrid_prefetch: int = Field(default=20, alias="RAG_HYBRID_PREFETCH")
+    rag_rrf_k: int = Field(default=60, alias="RAG_RRF_K")
 
     @field_validator(
         "euri_api_key",

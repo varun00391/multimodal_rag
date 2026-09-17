@@ -173,3 +173,45 @@ def test_normalize_qdrant_cloud_url_adds_port() -> None:
     assert url.endswith(":6333")
     same = normalize_qdrant_url(url)
     assert same == url
+
+
+def _hit(child_id: str, parent_id: str, score: float, **kwargs) -> ChildHit:
+    payload = dict(
+        child_id=child_id,
+        parent_id=parent_id,
+        parent_type="unit",
+        parent_text="page",
+        child_text=child_id,
+        score=score,
+        filename="a.pdf",
+        unit_type="page",
+        unit_index=1,
+        element_type="paragraph",
+        modality="text",
+        document_id="d",
+    )
+    payload.update(kwargs)
+    return ChildHit(**payload)
+
+
+def test_fuse_rrf_ranks_overlap_first() -> None:
+    from extraction.rag.retrieve import fuse_rrf
+
+    dense = [_hit("c1", "p1", 0.9), _hit("c2", "p2", 0.8)]
+    sparse = [_hit("c2", "p2", 4.0), _hit("c3", "p3", 3.0)]
+    fused = fuse_rrf(dense, sparse, rrf_k=60, limit=8)
+    assert fused[0].child_id == "c2"
+    assert fused[0].bm25_hit is True
+    assert fused[0].dense_score == 0.8
+
+
+def test_dense_cutoff_drops_weak_dense_keeps_bm25() -> None:
+    from extraction.rag.retrieve import apply_dense_cutoff
+
+    hits = [
+        _hit("weak", "p1", 0.2, dense_score=0.2, bm25_hit=False),
+        _hit("strong", "p2", 0.81, dense_score=0.81, bm25_hit=False),
+        _hit("lexical", "p3", 0.05, dense_score=0.12, bm25_hit=True),
+    ]
+    kept = apply_dense_cutoff(hits, 0.40)
+    assert [hit.child_id for hit in kept] == ["strong", "lexical"]
